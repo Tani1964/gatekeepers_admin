@@ -4,6 +4,11 @@ import { Calendar, Clock, DollarSign, Edit2, LogOut, Plus, Trash2, Upload, Users
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 
+interface FriendOrEnemy {
+  name: string;
+  image: string;
+}
+
 interface Game {
   _id: string;
   title: string;
@@ -11,8 +16,8 @@ interface Game {
   startTime: string;
   durationInMinutes: number;
   price: number;
-  friends: string[];  // Just base64 image strings
-  enemies: string[];  // Just base64 image strings
+  friends: (FriendOrEnemy | string)[];
+  enemies: (FriendOrEnemy | string)[];
   friendDescription?: string;
   enemyDescription?: string;
   showFriendImages: boolean;
@@ -42,8 +47,8 @@ export default function Dashboard() {
     showEnemyImages: true
   });
   
-  const [friends, setFriends] = useState<string[]>([]);  // Just image strings
-  const [enemies, setEnemies] = useState<string[]>([]);  // Just image strings
+  const [friends, setFriends] = useState<string[]>([]);
+  const [enemies, setEnemies] = useState<string[]>([]);
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
@@ -86,6 +91,11 @@ export default function Dashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     router.push('/');
+  };
+
+  // Helper function to get image URL from friend/enemy
+  const getImageUrl = (item: FriendOrEnemy | string): string => {
+    return typeof item === 'string' ? item : item.image;
   };
 
   // Convert file to base64
@@ -215,8 +225,9 @@ export default function Dashboard() {
       showFriendImages: game.showFriendImages !== false,
       showEnemyImages: game.showEnemyImages !== false
     });
-    setFriends(game.friends || []);
-    setEnemies(game.enemies || []);
+    // Convert to string array for editing
+    setFriends(game.friends?.map(f => getImageUrl(f)) || []);
+    setEnemies(game.enemies?.map(e => getImageUrl(e)) || []);
     setShowGameForm(true);
   };
 
@@ -444,7 +455,7 @@ export default function Dashboard() {
                           <X size={16} />
                         </button>
                         <img
-                          src={friendImage.image||friendImage}
+                          src={friendImage}
                           alt={`Friend ${index + 1}`}
                           className="w-full h-24 object-cover rounded"
                         />
@@ -505,7 +516,7 @@ export default function Dashboard() {
                           <X size={16} />
                         </button>
                         <img
-                          src={enemyImage.image||enemyImage}
+                          src={enemyImage}
                           alt={`Enemy ${index + 1}`}
                           className="w-full h-24 object-cover rounded"
                         />
@@ -541,7 +552,7 @@ export default function Dashboard() {
             <div className="bg-slate-800 rounded-lg p-12 text-center border border-slate-700">
               <Calendar className="mx-auto text-slate-600 mb-4" size={48} />
               <p className="text-slate-400 text-lg">No games created yet</p>
-              <p className="text-slate-500 text-sm mt-2">Click "Create New Game" to get started</p>
+              <p className="text-slate-500 text-sm mt-2">Click &quot;Create New Game&quot; to get started</p>
             </div>
           ) : (
             games.map(game => (
@@ -592,7 +603,7 @@ export default function Dashboard() {
                       {game.friends && game.showFriendImages && game.friends.map((friendImage, i) => (
                         <img 
                           key={i} 
-                          src={friendImage.image||friendImage} 
+                          src={getImageUrl(friendImage)} 
                           alt={`Friend ${i + 1}`} 
                           className="w-12 h-12 rounded-lg object-cover border-2 border-green-500" 
                         />
@@ -610,7 +621,7 @@ export default function Dashboard() {
                       {game.enemies && game.showEnemyImages && game.enemies.map((enemyImage, i) => (
                         <img 
                           key={i} 
-                          src={enemyImage.image||enemyImage} 
+                          src={getImageUrl(enemyImage)} 
                           alt={`Enemy ${i + 1}`} 
                           className="w-12 h-12 rounded-lg object-cover border-2 border-red-500" 
                         />

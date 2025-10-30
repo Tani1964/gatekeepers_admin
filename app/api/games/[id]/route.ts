@@ -1,9 +1,23 @@
 import dbConnect from '@/lib/db';
 import { Game } from '@/lib/models/Game';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
 
-function verifyToken(request: NextRequest) {
+interface DecodedToken extends JwtPayload {
+  userId: string;
+  role: string;
+}
+
+// Add these type definitions for friends and enemies
+interface Friend {
+  name: string;
+}
+
+interface Enemy {
+  name: string;
+}
+
+function verifyToken(request: NextRequest): DecodedToken | null {
   const authHeader = request.headers.get('authorization');
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -13,10 +27,10 @@ function verifyToken(request: NextRequest) {
   const token = authHeader.substring(7);
   
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken;
     return decoded;
   } catch (error) {
-    return null;
+    throw error
   }
 }
 
@@ -73,7 +87,7 @@ export async function POST(request: NextRequest) {
     // Validate that friends and enemies have the correct structure
     if (gameData.friends.length > 0) {
       const hasInvalidFriend = gameData.friends.some(
-        (f: any) => !f.name || typeof f.name !== 'string'
+        (f: Friend) => !f.name || typeof f.name !== 'string'
       );
       if (hasInvalidFriend) {
         return NextResponse.json(
@@ -85,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     if (gameData.enemies.length > 0) {
       const hasInvalidEnemy = gameData.enemies.some(
-        (e: any) => !e.name || typeof e.name !== 'string'
+        (e: Enemy) => !e.name || typeof e.name !== 'string'
       );
       if (hasInvalidEnemy) {
         return NextResponse.json(
@@ -109,7 +123,7 @@ export async function POST(request: NextRequest) {
     
     // Extract validation errors if they exist
     if (error && typeof error === 'object' && 'errors' in error) {
-      const validationErrors = (error as any).errors;
+      const validationErrors = (error as { errors: Record<string, { message: string }> }).errors;
       const errorDetails = Object.keys(validationErrors).map(key => {
         return `${key}: ${validationErrors[key].message}`;
       }).join(', ');
@@ -126,7 +140,7 @@ export async function POST(request: NextRequest) {
 // PUT update existing game
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = verifyToken(request);
@@ -141,6 +155,7 @@ export async function PUT(
     await dbConnect();
     
     const body = await request.json();
+    const params = await props.params; // Await the params
     
     // Ensure friends and enemies are properly formatted
     const updateData = {
@@ -152,7 +167,7 @@ export async function PUT(
     // Validate that friends and enemies have the correct structure
     if (updateData.friends.length > 0) {
       const hasInvalidFriend = updateData.friends.some(
-        (f: any) => !f.name || typeof f.name !== 'string'
+        (f: Friend) => !f.name || typeof f.name !== 'string'
       );
       if (hasInvalidFriend) {
         return NextResponse.json(
@@ -164,7 +179,7 @@ export async function PUT(
 
     if (updateData.enemies.length > 0) {
       const hasInvalidEnemy = updateData.enemies.some(
-        (e: any) => !e.name || typeof e.name !== 'string'
+        (e: Enemy) => !e.name || typeof e.name !== 'string'
       );
       if (hasInvalidEnemy) {
         return NextResponse.json(
@@ -200,7 +215,7 @@ export async function PUT(
 // DELETE game
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = verifyToken(request);
@@ -213,6 +228,8 @@ export async function DELETE(
     }
 
     await dbConnect();
+    
+    const params = await props.params; // Await the params
     
     const game = await Game.findByIdAndDelete(params.id);
     

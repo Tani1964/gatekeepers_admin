@@ -57,7 +57,10 @@ async function createAdmin() {
     }
 
     // Hash password
-    const password = process.env.ADMIN_PASSWORD ;
+    const password = process.env.ADMIN_PASSWORD;
+    if (!password) {
+      throw new Error('ADMIN_PASSWORD is not defined in environment variables');
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create admin user

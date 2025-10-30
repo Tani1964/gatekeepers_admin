@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await User.findByEmail(email);
+    const user = await User.findOne({ email });
 
     if (!user) {
       return NextResponse.json(
