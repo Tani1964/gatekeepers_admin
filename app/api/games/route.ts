@@ -36,7 +36,7 @@ function normalizeCharacters(data: unknown, index: number): GameCharacter[] {
   
   if (!Array.isArray(data)) return [];
   
-  return data.map((item, i) => {
+  const mapped = data.map((item, i) => {
     // If it's already a proper object with name and optionally image
     if (typeof item === 'object' && item !== null && 'name' in item) {
       const obj = item as { name: string; image?: string };
@@ -67,7 +67,9 @@ function normalizeCharacters(data: unknown, index: number): GameCharacter[] {
     // If we get here, the data format is wrong
     console.warn('Invalid character data format:', typeof item, item?.toString().substring(0, 50));
     return null;
-  }).filter((item): item is GameCharacter => item !== null);
+  });
+  
+  return mapped.filter((item): item is GameCharacter => item !== null);
 }
 
 // GET all games
@@ -191,117 +193,6 @@ export async function POST(request: NextRequest) {
         error: errorMessage,
         details: errorDetails || (error instanceof Error ? error.message : 'Unknown error')
       },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT update existing game
-export async function PUT(
-  request: NextRequest,
-  props: { params: Promise<{ id: string }> }
-) {
-  try {
-    const user = verifyToken(request);
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    await dbConnect();
-    
-    const body = await request.json();
-    const params = await props.params;
-    
-    // Normalize friends and enemies data
-    const friends = normalizeCharacters(body.friends, 0);
-    const enemies = normalizeCharacters(body.enemies, 1);
-    
-    // Validate the normalized data
-    const invalidFriend = friends.find(f => !f.name || typeof f.name !== 'string');
-    if (invalidFriend) {
-      return NextResponse.json(
-        { error: 'Invalid friend data: each friend must have a name property' },
-        { status: 400 }
-      );
-    }
-    
-    const invalidEnemy = enemies.find(e => !e.name || typeof e.name !== 'string');
-    if (invalidEnemy) {
-      return NextResponse.json(
-        { error: 'Invalid enemy data: each enemy must have a name property' },
-        { status: 400 }
-      );
-    }
-    
-    const updateData = {
-      ...body,
-      friends,
-      enemies,
-    };
-    
-    const game = await Game.findByIdAndUpdate(
-      params.id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-    
-    if (!game) {
-      return NextResponse.json(
-        { error: 'Game not found' },
-        { status: 404 }
-      );
-    }
-    
-    return NextResponse.json({ success: true, game });
-  } catch (error) {
-    console.error('Update game error:', error);
-    return NextResponse.json(
-      { 
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// DELETE game
-export async function DELETE(
-  request: NextRequest,
-  props: { params: Promise<{ id: string }> }
-) {
-  try {
-    const user = verifyToken(request);
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    await dbConnect();
-    
-    const params = await props.params;
-    
-    const game = await Game.findByIdAndDelete(params.id);
-    
-    if (!game) {
-      return NextResponse.json(
-        { error: 'Game not found' },
-        { status: 404 }
-      );
-    }
-    
-    return NextResponse.json({ success: true, message: 'Game deleted' });
-  } catch (error) {
-    console.error('Delete game error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
       { status: 500 }
     );
   }

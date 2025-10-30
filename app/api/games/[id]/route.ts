@@ -8,13 +8,9 @@ interface DecodedToken extends JwtPayload {
   role: string;
 }
 
-// Add these type definitions for friends and enemies
-interface Friend {
+interface GameCharacter {
   name: string;
-}
-
-interface Enemy {
-  name: string;
+  image: string;
 }
 
 function verifyToken(request: NextRequest): DecodedToken | null {
@@ -30,117 +26,54 @@ function verifyToken(request: NextRequest): DecodedToken | null {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken;
     return decoded;
   } catch (error) {
-    throw error
+    throw error;
   }
 }
 
-// GET all games
-export async function GET(request: NextRequest) {
-  try {
-    const user = verifyToken(request);
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    await dbConnect();
-    
-    const games = await Game.find({}).sort({ createdAt: -1 });
-    
-    return NextResponse.json({ success: true, games });
-  } catch (error) {
-    console.error('Get games error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// POST create new game
-export async function POST(request: NextRequest) {
-  try {
-    const user = verifyToken(request);
-    
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    await dbConnect();
-    
-    const body = await request.json();
-    
-    // Ensure friends and enemies are properly formatted
-    const gameData = {
-      ...body,
-      friends: body.friends || [],
-      enemies: body.enemies || [],
-      createdBy: user.userId,
-    };
-
-    // Validate that friends and enemies have the correct structure
-    if (gameData.friends.length > 0) {
-      const hasInvalidFriend = gameData.friends.some(
-        (f: Friend) => !f.name || typeof f.name !== 'string'
-      );
-      if (hasInvalidFriend) {
-        return NextResponse.json(
-          { error: 'Invalid friend data structure' },
-          { status: 400 }
-        );
+// Helper function to normalize character data
+function normalizeCharacters(data: unknown, index: number): GameCharacter[] {
+  if (!data) return [];
+  
+  if (!Array.isArray(data)) return [];
+  
+  return data.map((item, i) => {
+    // If it's already a proper object with name and optionally image
+    if (typeof item === 'object' && item !== null && 'name' in item) {
+      const obj = item as { name: string; image?: string };
+      // Check if it's actually valid (not a base64 string in the name field)
+      if (obj.name && !obj.name.startsWith('data:image')) {
+        return {
+          name: obj.name,
+          image: obj.image || ''
+        };
       }
     }
-
-    if (gameData.enemies.length > 0) {
-      const hasInvalidEnemy = gameData.enemies.some(
-        (e: Enemy) => !e.name || typeof e.name !== 'string'
-      );
-      if (hasInvalidEnemy) {
-        return NextResponse.json(
-          { error: 'Invalid enemy data structure' },
-          { status: 400 }
-        );
-      }
-    }
-
-    const game = await Game.create(gameData);
     
-    return NextResponse.json({ success: true, game }, { status: 201 });
-  } catch (error) {
-    console.error('Create game error:', error);
-    
-    // Provide more detailed error information
-    let errorMessage = 'Internal server error';
-    if (error instanceof Error) {
-      errorMessage = error.message;
+    // If it's a plain string (just a name, not an image)
+    if (typeof item === 'string' && !item.startsWith('data:image')) {
+      return { name: item, image: '' };
     }
     
-    // Extract validation errors if they exist
-    if (error && typeof error === 'object' && 'errors' in error) {
-      const validationErrors = (error as { errors: Record<string, { message: string }> }).errors;
-      const errorDetails = Object.keys(validationErrors).map(key => {
-        return `${key}: ${validationErrors[key].message}`;
-      }).join(', ');
-      errorMessage = `Validation failed: ${errorDetails}`;
+    // If it's a base64 image string (current frontend format)
+    if (typeof item === 'string' && item.startsWith('data:image')) {
+      // Auto-generate a name based on position
+      const type = index === 0 ? 'Friend' : 'Enemy';
+      return {
+        name: `${type} ${i + 1}`,
+        image: item
+      };
     }
     
-    return NextResponse.json(
-      { error: 'Internal server error', details: errorMessage },
-      { status: 500 }
-    );
-  }
+    // If we get here, the data format is wrong
+    console.warn('Invalid character data format:', typeof item, item?.toString().substring(0, 50));
+    return null;
+  }).filter((item): item is GameCharacter => item !== null);
 }
 
 // PUT update existing game
 export async function PUT(
   request: NextRequest,
-  props: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = verifyToken(request);
@@ -155,42 +88,37 @@ export async function PUT(
     await dbConnect();
     
     const body = await request.json();
-    const params = await props.params; // Await the params
+    const { id } = await params;
     
-    // Ensure friends and enemies are properly formatted
+    // Normalize friends and enemies data
+    const friends = normalizeCharacters(body.friends, 0);
+    const enemies = normalizeCharacters(body.enemies, 1);
+    
+    // Validate the normalized data
+    const invalidFriend = friends.find(f => !f.name || typeof f.name !== 'string');
+    if (invalidFriend) {
+      return NextResponse.json(
+        { error: 'Invalid friend data: each friend must have a name property' },
+        { status: 400 }
+      );
+    }
+    
+    const invalidEnemy = enemies.find(e => !e.name || typeof e.name !== 'string');
+    if (invalidEnemy) {
+      return NextResponse.json(
+        { error: 'Invalid enemy data: each enemy must have a name property' },
+        { status: 400 }
+      );
+    }
+    
     const updateData = {
       ...body,
-      friends: body.friends || [],
-      enemies: body.enemies || [],
+      friends,
+      enemies,
     };
-
-    // Validate that friends and enemies have the correct structure
-    if (updateData.friends.length > 0) {
-      const hasInvalidFriend = updateData.friends.some(
-        (f: Friend) => !f.name || typeof f.name !== 'string'
-      );
-      if (hasInvalidFriend) {
-        return NextResponse.json(
-          { error: 'Invalid friend data structure' },
-          { status: 400 }
-        );
-      }
-    }
-
-    if (updateData.enemies.length > 0) {
-      const hasInvalidEnemy = updateData.enemies.some(
-        (e: Enemy) => !e.name || typeof e.name !== 'string'
-      );
-      if (hasInvalidEnemy) {
-        return NextResponse.json(
-          { error: 'Invalid enemy data structure' },
-          { status: 400 }
-        );
-      }
-    }
-
+    
     const game = await Game.findByIdAndUpdate(
-      params.id,
+      id,
       updateData,
       { new: true, runValidators: true }
     );
@@ -206,7 +134,10 @@ export async function PUT(
   } catch (error) {
     console.error('Update game error:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
@@ -215,7 +146,7 @@ export async function PUT(
 // DELETE game
 export async function DELETE(
   request: NextRequest,
-  props: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = verifyToken(request);
@@ -229,9 +160,9 @@ export async function DELETE(
 
     await dbConnect();
     
-    const params = await props.params; // Await the params
+    const { id } = await params;
     
-    const game = await Game.findByIdAndDelete(params.id);
+    const game = await Game.findByIdAndDelete(id);
     
     if (!game) {
       return NextResponse.json(
