@@ -1,9 +1,6 @@
 import { Document, Types } from 'mongoose';
 
-export interface IGameCharacter {
-  name: string;
-  image: string;  // base64 image
-}
+
 
 export interface IGame extends Document {
   _id: Types.ObjectId;
@@ -11,8 +8,8 @@ export interface IGame extends Document {
   startTime: string;
   startDate: string;
   durationInMinutes: number;
-  friends: IGameCharacter[];  // Changed to array of objects
-  enemies: IGameCharacter[];  // Changed to array of objects
+  friends: string[];  
+  enemies: string[];  
   friendDescription?: string;
   enemyDescription?: string;
   showFriendImages: boolean;

@@ -4,11 +4,6 @@ import { Calendar, Clock, DollarSign, Edit2, LogOut, Plus, Trash2, Upload, Users
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 
-interface FriendOrEnemy {
-  name: string;
-  image: string;
-}
-
 interface Game {
   _id: string;
   title: string;
@@ -16,8 +11,8 @@ interface Game {
   startTime: string;
   durationInMinutes: number;
   price: number;
-  friends: (FriendOrEnemy | string)[];
-  enemies: (FriendOrEnemy | string)[];
+  friends: string[];  // Array of image URLs
+  enemies: string[];  // Array of image URLs
   friendDescription?: string;
   enemyDescription?: string;
   showFriendImages: boolean;
@@ -33,6 +28,7 @@ export default function Dashboard() {
   const [showGameForm, setShowGameForm] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   
   // Form state
   const [gameForm, setGameForm] = useState({
@@ -47,8 +43,8 @@ export default function Dashboard() {
     showEnemyImages: true
   });
   
-  const [friends, setFriends] = useState<string[]>([]);
-  const [enemies, setEnemies] = useState<string[]>([]);
+  const [friends, setFriends] = useState<string[]>([]);  // Array of image URLs
+  const [enemies, setEnemies] = useState<string[]>([]);  // Array of image URLs
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
@@ -93,19 +89,25 @@ export default function Dashboard() {
     router.push('/');
   };
 
-  // Helper function to get image URL from friend/enemy
-  const getImageUrl = (item: FriendOrEnemy | string): string => {
-    return typeof item === 'string' ? item : item.image;
-  };
+  // Upload image to storage bucket and return URL
+  const uploadImage = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
 
-  // Convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
     });
+
+    if (!res.ok) {
+      throw new Error('Failed to upload image');
+    }
+
+    const data = await res.json();
+    return data.url; // Return the URL from the storage bucket
   };
 
   // Add friend image
@@ -124,11 +126,14 @@ export default function Dashboard() {
     }
 
     try {
-      const base64 = await fileToBase64(file);
-      setFriends([...friends, base64]);
+      setUploading(true);
+      const imageUrl = await uploadImage(file);
+      setFriends([...friends, imageUrl]);
     } catch (error) {
       console.error('Error uploading image:', error);
       alert('Failed to upload image');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -148,11 +153,14 @@ export default function Dashboard() {
     }
 
     try {
-      const base64 = await fileToBase64(file);
-      setEnemies([...enemies, base64]);
+      setUploading(true);
+      const imageUrl = await uploadImage(file);
+      setEnemies([...enemies, imageUrl]);
     } catch (error) {
       console.error('Error uploading image:', error);
       alert('Failed to upload image');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -225,9 +233,8 @@ export default function Dashboard() {
       showFriendImages: game.showFriendImages !== false,
       showEnemyImages: game.showEnemyImages !== false
     });
-    // Convert to string array for editing
-    setFriends(game.friends?.map(f => getImageUrl(f)) || []);
-    setEnemies(game.enemies?.map(e => getImageUrl(e)) || []);
+    setFriends(game.friends || []);
+    setEnemies(game.enemies || []);
     setShowGameForm(true);
   };
 
@@ -326,7 +333,7 @@ export default function Dashboard() {
           <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm">Total Revenue</p>
+                <p className="text-slate-400 text-sm">Total Spent</p>
                 <p className="text-3xl font-bold text-white mt-1">
                   ₦{games.reduce((sum, g) => sum + (g.price || 0), 0).toLocaleString()}
                 </p>
@@ -435,18 +442,19 @@ export default function Dashboard() {
                   <div className="mb-3">
                     <label className="flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg cursor-pointer transition-colors w-full">
                       <Upload size={18} />
-                      Add Friend Image
+                      {uploading ? 'Uploading...' : 'Add Friend Image'}
                       <input
                         type="file"
                         accept="image/*"
                         onChange={handleAddFriend}
+                        disabled={uploading}
                         className="hidden"
                       />
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                    {friends.map((friendImage, index) => (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {friends.map((imageUrl, index) => (
                       <div key={index} className="relative bg-slate-700 rounded-lg p-2 border border-slate-600">
                         <button
                           onClick={() => removeFriend(index)}
@@ -455,15 +463,16 @@ export default function Dashboard() {
                           <X size={16} />
                         </button>
                         <img
-                          src={friendImage}
+                          src={imageUrl}
                           alt={`Friend ${index + 1}`}
                           className="w-full h-24 object-cover rounded"
                         />
+                        <p className="text-xs text-center text-slate-400 mt-1">Friend {index + 1}</p>
                       </div>
                     ))}
                   </div>
                   {friends.length > 0 && (
-                    <p className="text-sm text-slate-400 mt-2">{friends.length} friend image(s) added</p>
+                    <p className="text-sm text-slate-400 mt-2">{friends.length} friend(s) added</p>
                   )}
                 </div>
 
@@ -496,18 +505,19 @@ export default function Dashboard() {
                   <div className="mb-3">
                     <label className="flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg cursor-pointer transition-colors w-full">
                       <Upload size={18} />
-                      Add Enemy Image
+                      {uploading ? 'Uploading...' : 'Add Enemy Image'}
                       <input
                         type="file"
                         accept="image/*"
                         onChange={handleAddEnemy}
+                        disabled={uploading}
                         className="hidden"
                       />
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
-                    {enemies.map((enemyImage, index) => (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {enemies.map((imageUrl, index) => (
                       <div key={index} className="relative bg-slate-700 rounded-lg p-2 border border-slate-600">
                         <button
                           onClick={() => removeEnemy(index)}
@@ -516,28 +526,31 @@ export default function Dashboard() {
                           <X size={16} />
                         </button>
                         <img
-                          src={enemyImage}
+                          src={imageUrl}
                           alt={`Enemy ${index + 1}`}
                           className="w-full h-24 object-cover rounded"
                         />
+                        <p className="text-xs text-center text-slate-400 mt-1">Enemy {index + 1}</p>
                       </div>
                     ))}
                   </div>
                   {enemies.length > 0 && (
-                    <p className="text-sm text-slate-400 mt-2">{enemies.length} enemy image(s) added</p>
+                    <p className="text-sm text-slate-400 mt-2">{enemies.length} enemy(ies) added</p>
                   )}
                 </div>
 
                 <div className="flex gap-3 pt-4 sticky bottom-0 bg-slate-800 pb-2">
                   <button
                     onClick={handleGameSubmit}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                    disabled={uploading}
+                    className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {editingGame ? 'Update Game' : 'Create Game'}
                   </button>
                   <button
                     onClick={resetForm}
-                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
+                    disabled={uploading}
+                    className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
@@ -600,13 +613,17 @@ export default function Dashboard() {
                       <p className="text-xs text-slate-400 mb-2">{game.friendDescription}</p>
                     )}
                     <div className="flex flex-wrap gap-2">
-                      {game.friends && game.showFriendImages && game.friends.map((friendImage, i) => (
-                        <img 
-                          key={i} 
-                          src={getImageUrl(friendImage)} 
-                          alt={`Friend ${i + 1}`} 
-                          className="w-12 h-12 rounded-lg object-cover border-2 border-green-500" 
-                        />
+                      {game.friends && game.showFriendImages && game.friends.map((imageUrl, i) => (
+                        <div key={i} className="relative group">
+                          <img 
+                            src={imageUrl} 
+                            alt={`Friend ${i + 1}`} 
+                            className="w-16 h-16 rounded-lg object-cover border-2 border-green-500" 
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white text-xs p-1 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity text-center">
+                            Friend {i + 1}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -618,13 +635,17 @@ export default function Dashboard() {
                       <p className="text-xs text-slate-400 mb-2">{game.enemyDescription}</p>
                     )}
                     <div className="flex flex-wrap gap-2">
-                      {game.enemies && game.showEnemyImages && game.enemies.map((enemyImage, i) => (
-                        <img 
-                          key={i} 
-                          src={getImageUrl(enemyImage)} 
-                          alt={`Enemy ${i + 1}`} 
-                          className="w-12 h-12 rounded-lg object-cover border-2 border-red-500" 
-                        />
+                      {game.enemies && game.showEnemyImages && game.enemies.map((imageUrl, i) => (
+                        <div key={i} className="relative group">
+                          <img 
+                            src={imageUrl} 
+                            alt={`Enemy ${i + 1}`} 
+                            className="w-16 h-16 rounded-lg object-cover border-2 border-red-500" 
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-white text-xs p-1 rounded-b-lg opacity-0 group-hover:opacity-100 transition-opacity text-center">
+                            Enemy {i + 1}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>

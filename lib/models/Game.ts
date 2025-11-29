@@ -1,23 +1,12 @@
 import mongoose, { Schema } from "mongoose";
-import { IGame, IGameCharacter } from "../types/game";
+import { IGame } from "../types/game";
 
 // Delete the cached model to prevent issues with Next.js hot reloading
 if (mongoose.models.Game) {
   delete mongoose.models.Game;
 }
 
-// Define the subdocument schema for characters
-const CharacterSchema = new Schema<IGameCharacter>({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  image: {
-    type: String,
-    default: '',
-  }
-}, { _id: false }); // _id: false prevents Mongoose from creating an _id for subdocuments
+
 
 const GameSchema = new Schema<IGame>(
   {
@@ -40,12 +29,12 @@ const GameSchema = new Schema<IGame>(
     },
     // Friends with images - use the CharacterSchema
     friends: {
-      type: [CharacterSchema],
+      type: [String],
       default: [],
     },
     // Enemies with images - use the CharacterSchema
     enemies: {
-      type: [CharacterSchema],
+      type: [String],
       default: [],
     },
     friendDescription: {
