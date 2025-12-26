@@ -96,12 +96,12 @@ export async function POST(request: NextRequest) {
       publicId: result.public_id
     });
 
-  } catch (error) {
-    console.error('Upload error:', error);
+  } catch (err) {
+    console.error('Upload error:', err);
     return NextResponse.json(
       { 
         error: 'Failed to upload image',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: err instanceof Error ? err.message : 'Unknown error'
       },
       { status: 500 }
     );

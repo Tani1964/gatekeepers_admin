@@ -26,38 +26,6 @@ function verifyToken(request: NextRequest): DecodedToken | null {
   }
 }
 
-// Helper function to normalize character data to string array
-function normalizeCharacters(data: unknown): string[] {
-  if (!data) return [];
-  
-  if (!Array.isArray(data)) return [];
-  
-  return data
-    .map((item) => {
-      // If it's already a string
-      if (typeof item === 'string') {
-        return item;
-      }
-      
-      // If it's an object with a name property
-      if (typeof item === 'object' && item !== null && 'name' in item) {
-        const obj = item as { name: string };
-        return obj.name;
-      }
-      
-      // Skip invalid items
-      return null;
-    })
-    .filter((item): item is string => item !== null && item.length > 0);
-}
-
-// Helper to get user image URLs by names
-async function getUserImageUrls(names: string[]): Promise<string[]> {
-  if (!names.length) return [];
-  await dbConnect();
-  const users = await User.find({ name: { $in: names } }, 'profileImage');
-  return users.map((u: any) => u.profileImage);
-}
 
 // GET all games
 export async function GET(request: NextRequest) {
@@ -107,12 +75,9 @@ export async function POST(request: NextRequest) {
       }
       await dbConnect();
       const body = await request.json();
-      // Normalize friends and enemies to string arrays
-      const friends = normalizeCharacters(body.friends);
-      const enemies = normalizeCharacters(body.enemies);
-      // Get image URLs for friends and enemies
-      const friendImageUrls = await getUserImageUrls(friends);
-      const enemyImageUrls = await getUserImageUrls(enemies);
+      // Accept and store image URLs for friends and enemies directly
+      const friends = Array.isArray(body.friends) ? body.friends : [];
+      const enemies = Array.isArray(body.enemies) ? body.enemies : [];
       const gameData = {
         title: body.title,
         startTime: body.startTime,
@@ -128,14 +93,9 @@ export async function POST(request: NextRequest) {
         createdBy: user.userId,
       };
       const game = await Game.create(gameData);
-      // Return only image URLs for friends and enemies
       return NextResponse.json({
         success: true,
-        game: {
-          ...game.toObject(),
-          friends: friendImageUrls,
-          enemies: enemyImageUrls,
-        },
+        game: game.toObject(),
       }, { status: 201 });
     } catch (error) {
       console.error('Create game error:', error);
