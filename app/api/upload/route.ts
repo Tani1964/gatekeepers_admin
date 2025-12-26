@@ -27,6 +27,7 @@ function verifyToken(request: NextRequest): DecodedToken | null {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken;
     return decoded;
   } catch (error) {
+    console.error('Token verification error:', error);
     return null;
   }
 }
@@ -42,24 +43,20 @@ async function fileToBase64(file: File): Promise<string> {
 export async function POST(request: NextRequest) {
   try {
     const user = verifyToken(request);
-    
     if (!user || user.role !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
-
     const formData = await request.formData();
     const file = formData.get('file') as File;
-
     if (!file) {
       return NextResponse.json(
         { error: 'No file provided' },
         { status: 400 }
       );
     }
-
     // Validate file type
     if (!file.type.startsWith('image/')) {
       return NextResponse.json(
@@ -67,7 +64,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       return NextResponse.json(
@@ -75,27 +71,23 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
     // Convert file to base64
     const base64File = await fileToBase64(file);
-
     // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(base64File, {
       folder: 'game-characters',
       resource_type: 'image',
       transformation: [
-        { width: 800, height: 800, crop: 'limit' }, // Resize large images
-        { quality: 'auto' }, // Automatic quality optimization
-        { fetch_format: 'auto' }, // Automatic format selection (WebP when supported)
+        { width: 800, height: 800, crop: 'limit' },
+        { quality: 'auto' },
+        { fetch_format: 'auto' },
       ],
     });
-
     return NextResponse.json({ 
       success: true, 
       url: result.secure_url,
       publicId: result.public_id
     });
-
   } catch (err) {
     console.error('Upload error:', err);
     return NextResponse.json(

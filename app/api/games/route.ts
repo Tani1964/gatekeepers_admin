@@ -1,6 +1,5 @@
 import dbConnect from '@/lib/db';
 import { Game } from '@/lib/models/Game';
-import { User } from '@/lib/models/User';
 import jwt, { JwtPayload } from 'jsonwebtoken';
 import { NextRequest, NextResponse } from 'next/server';
 
